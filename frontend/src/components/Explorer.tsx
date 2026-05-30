@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { Table, ArrowRight, Loader2, Database, AlertCircle, RefreshCw } from "lucide-react";
+import { Table, ArrowRight, Loader2, Database, AlertCircle, RefreshCw, Download } from "lucide-react";
 
 interface ExplorerProps {
   apiBaseUrl: string;
@@ -22,6 +22,34 @@ export default function Explorer({ apiBaseUrl }: ExplorerProps) {
   const [rows, setRows] = useState<any[]>([]);
   const [columns, setColumns] = useState<string[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
+
+  const handleExportCsv = (tableName: string, data: any[]) => {
+    if (!data || data.length === 0) return;
+    const headers = Object.keys(data[0]);
+    const csvRows = [];
+    
+    // Header row
+    csvRows.push(headers.join(","));
+    
+    // Data rows
+    for (const row of data) {
+      const values = headers.map(header => {
+        const val = row[header];
+        const escaped = ("" + (val === null || val === undefined ? "" : val)).replace(/"/g, '\\"');
+        return `"${escaped}"`;
+      });
+      csvRows.push(values.join(","));
+    }
+    
+    const csvContent = "data:text/csv;charset=utf-8," + csvRows.join("\n");
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `${tableName}_export_${Date.now()}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   const fetchTableData = async (tableName: string) => {
     setLoading(true);
@@ -74,12 +102,21 @@ export default function Explorer({ apiBaseUrl }: ExplorerProps) {
           </h2>
           <p className="text-sm text-zinc-400">Direct inspect of SQLite database tables (limited to top 100 rows).</p>
         </div>
-        <button 
-          onClick={() => fetchTableData(selectedTable)} 
-          className="flex items-center gap-1.5 text-xs bg-zinc-900 border border-zinc-800 hover:border-zinc-700 text-zinc-300 px-3 py-2 rounded-lg transition"
-        >
-          <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} /> Reload
-        </button>
+        <div className="flex items-center gap-2">
+          <button 
+            onClick={() => handleExportCsv(selectedTable, rows)}
+            disabled={rows.length === 0}
+            className="flex items-center gap-1.5 text-xs bg-zinc-900 border border-zinc-800 hover:border-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed text-zinc-300 px-3 py-2 rounded-lg transition cursor-pointer"
+          >
+            <Download className="w-3.5 h-3.5 text-violet-400" /> Export CSV
+          </button>
+          <button 
+            onClick={() => fetchTableData(selectedTable)} 
+            className="flex items-center gap-1.5 text-xs bg-zinc-900 border border-zinc-800 hover:border-zinc-700 text-zinc-300 px-3 py-2 rounded-lg transition cursor-pointer"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} /> Reload
+          </button>
+        </div>
       </div>
 
       {/* Selector Grid */}

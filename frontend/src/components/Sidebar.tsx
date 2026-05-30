@@ -1,18 +1,29 @@
 import React, { useState, useEffect } from "react";
-import { BarChart3, Database, MessageSquareCode, Settings, ShieldCheck, Terminal, User, Cpu } from "lucide-react";
+import { BarChart3, Database, MessageSquareCode, Settings, ShieldCheck, Terminal, User, Cpu, Plus, Trash2, MessageSquare } from "lucide-react";
 
 interface SidebarProps {
   activeTab: string;
   setActiveTab: (tab: string) => void;
   isChatOpen: boolean;
   setIsChatOpen: (open: boolean) => void;
+  activeSessionId: string | null;
+  setActiveSessionId: (id: string | null) => void;
 }
 
-export default function Sidebar({ activeTab, setActiveTab, isChatOpen, setIsChatOpen }: SidebarProps) {
+export default function Sidebar({ 
+  activeTab, 
+  setActiveTab, 
+  isChatOpen, 
+  setIsChatOpen,
+  activeSessionId,
+  setActiveSessionId
+}: SidebarProps) {
   const [preferOllama, setPreferOllama] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
   const [isPending, setIsPending] = useState(false);
   const [modelName, setModelName] = useState("qwen2.5:3b");
+  const [availableModels, setAvailableModels] = useState<string[]>([]);
+  const [sessions, setSessions] = useState<any[]>([]);
 
   const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -38,6 +49,42 @@ export default function Sidebar({ activeTab, setActiveTab, isChatOpen, setIsChat
     const interval = setInterval(fetchOllamaStatus, 15000);
     return () => clearInterval(interval);
   }, []);
+
+  const fetchAvailableModels = async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/ollama/models`);
+      if (res.ok) {
+        const data = await res.json();
+        setAvailableModels(data.models || []);
+      }
+    } catch (err) {
+      console.error("Error fetching available Ollama models:", err);
+    }
+  };
+
+  const fetchSessions = async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/chat/sessions`);
+      if (res.ok) {
+        const data = await res.json();
+        setSessions(data);
+      }
+    } catch (err) {
+      console.error("Error fetching sessions:", err);
+    }
+  };
+
+  useEffect(() => {
+    if (isRunning) {
+      fetchAvailableModels();
+    } else {
+      setAvailableModels([]);
+    }
+  }, [isRunning]);
+
+  useEffect(() => {
+    fetchSessions();
+  }, [activeSessionId]);
 
   const handleToggle = async (checked: boolean) => {
     setPreferOllama(checked);
@@ -67,6 +114,42 @@ export default function Sidebar({ activeTab, setActiveTab, isChatOpen, setIsChat
     } catch (err) {
       console.error("Failed to toggle Ollama:", err);
       setIsPending(false);
+    }
+  };
+
+  const handleModelChange = async (model: string) => {
+    setModelName(model);
+    try {
+      await fetch(`${API_BASE_URL}/api/ollama/select_model`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model_name: model }),
+      });
+    } catch (err) {
+      console.error("Error selecting Ollama model:", err);
+    }
+  };
+
+  const handleCreateSession = () => {
+    const newId = `session-${Date.now()}`;
+    setActiveSessionId(newId);
+    setIsChatOpen(true);
+  };
+
+  const handleDeleteSession = async (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/chat/sessions/${id}`, {
+        method: "DELETE"
+      });
+      if (res.ok) {
+        fetchSessions();
+        if (activeSessionId === id) {
+          setActiveSessionId(null);
+        }
+      }
+    } catch (err) {
+      console.error("Error deleting session:", err);
     }
   };
 
@@ -114,25 +197,52 @@ export default function Sidebar({ activeTab, setActiveTab, isChatOpen, setIsChat
             );
           })}
 
-          <div className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider px-3 pt-6 mb-2">
-            AI Copilot
+          <div className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider px-3 pt-6 mb-2 flex items-center justify-between">
+            <span>Saved Chats</span>
+            <button
+              onClick={handleCreateSession}
+              className="text-zinc-500 hover:text-zinc-300 p-0.5 rounded hover:bg-zinc-800 transition"
+              title="New Session"
+            >
+              <Plus className="w-3.5 h-3.5" />
+            </button>
           </div>
-          <button
-            onClick={() => setIsChatOpen(!isChatOpen)}
-            className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${
-              isChatOpen
-                ? "bg-violet-600 text-white font-semibold shadow-md shadow-violet-600/10"
-                : "text-zinc-400 hover:bg-zinc-800/60 hover:text-zinc-200"
-            }`}
-          >
-            <div className="flex items-center gap-3">
-              <MessageSquareCode className="w-4 h-4" />
-              <span>Ask Assistant</span>
-            </div>
-            <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400 font-mono">
-              Ctrl+K
-            </span>
-          </button>
+          
+          <div className="max-h-40 overflow-y-auto px-2 space-y-1 scrollbar-thin">
+            {sessions.map((sess) => {
+              const isSelected = activeSessionId === sess.session_id;
+              return (
+                <div
+                  key={sess.session_id}
+                  onClick={() => {
+                    setActiveSessionId(sess.session_id);
+                    setIsChatOpen(true);
+                  }}
+                  className={`group flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition ${
+                    isSelected
+                      ? "bg-zinc-800 text-zinc-100"
+                      : "text-zinc-400 hover:bg-zinc-900/60 hover:text-zinc-200"
+                  }`}
+                >
+                  <div className="flex items-center gap-2 truncate">
+                    <MessageSquare className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
+                    <span className="truncate">{sess.title}</span>
+                  </div>
+                  <button
+                    onClick={(e) => handleDeleteSession(e, sess.session_id)}
+                    className="opacity-0 group-hover:opacity-100 text-zinc-500 hover:text-red-400 p-0.5 rounded transition"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              );
+            })}
+            {sessions.length === 0 && (
+              <div className="text-[10px] text-zinc-650 italic px-3 py-1">
+                No saved sessions
+              </div>
+            )}
+          </div>
         </nav>
       </div>
 
@@ -183,6 +293,23 @@ export default function Sidebar({ activeTab, setActiveTab, isChatOpen, setIsChat
               {isPending ? "Starting..." : isRunning ? "Ollama Active" : "Ollama Offline"}
             </span>
           </div>
+
+          {/* Model Selector Dropdown */}
+          {isRunning && availableModels.length > 0 && (
+            <div className="space-y-1 pt-1.5 border-t border-zinc-800/40">
+              <select
+                value={modelName}
+                onChange={(e) => handleModelChange(e.target.value)}
+                className="w-full bg-zinc-900 border border-zinc-800 text-zinc-300 text-xs rounded p-1 focus:outline-none focus:border-violet-500 transition font-mono"
+              >
+                {availableModels.map((m) => (
+                  <option key={m} value={m}>
+                    {m}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
 
         {/* Status Indicator */}

@@ -1,6 +1,8 @@
 "use client";
 
 import React from "react";
+import DatePicker from "./DatePicker";
+import RegionSelect from "./RegionSelect";
 import { 
   TrendingUp, 
   Users, 
@@ -74,6 +76,12 @@ interface DashboardProps {
   loading: boolean;
   error: string | null;
   onAskQuestion: (q: string) => void;
+  startDate: string;
+  setStartDate: (d: string) => void;
+  endDate: string;
+  setEndDate: (d: string) => void;
+  region: string;
+  setRegion: (r: string) => void;
 }
 
 const REGION_COLORS = {
@@ -83,7 +91,18 @@ const REGION_COLORS = {
   West: "#f59e0b",  // Amber
 };
 
-export default function Dashboard({ data, loading, error, onAskQuestion }: DashboardProps) {
+export default function Dashboard({ 
+  data, 
+  loading, 
+  error, 
+  onAskQuestion,
+  startDate,
+  setStartDate,
+  endDate,
+  setEndDate,
+  region,
+  setRegion
+}: DashboardProps) {
   if (loading) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center min-h-[500px]">
@@ -143,6 +162,55 @@ export default function Dashboard({ data, loading, error, onAskQuestion }: Dashb
             Declining Products
           </button>
         </div>
+      </div>
+
+      {/* Filter Bar */}
+      <div className="p-4 bg-zinc-900/40 border border-zinc-800/80 rounded-xl flex flex-wrap items-center justify-between gap-4">
+        <div className="flex flex-wrap items-center gap-4">
+          <div className="space-y-1">
+            <span className="text-[10px] text-zinc-500 uppercase tracking-wider font-semibold block">Start Date</span>
+            <DatePicker
+              selectedDate={startDate}
+              onChange={setStartDate}
+              placeholder="Select date"
+            />
+          </div>
+          <div className="space-y-1">
+            <span className="text-[10px] text-zinc-500 uppercase tracking-wider font-semibold block">End Date</span>
+            <DatePicker
+              selectedDate={endDate}
+              onChange={setEndDate}
+              placeholder="Select date"
+            />
+          </div>
+          <div className="space-y-1">
+            <span className="text-[10px] text-zinc-500 uppercase tracking-wider font-semibold block">Region Filter</span>
+            <RegionSelect
+              value={region}
+              onChange={setRegion}
+              options={[
+                { label: "All Regions", value: "" },
+                { label: "North", value: "North" },
+                { label: "South", value: "South" },
+                { label: "East", value: "East" },
+                { label: "West", value: "West" }
+              ]}
+            />
+          </div>
+        </div>
+
+        {(startDate || endDate || region) && (
+          <button
+            onClick={() => {
+              setStartDate("");
+              setEndDate("");
+              setRegion("");
+            }}
+            className="text-xs text-violet-400 hover:text-violet-300 font-medium px-3 py-1.5 rounded-lg border border-violet-500/20 hover:bg-violet-500/10 transition mt-4 sm:mt-0"
+          >
+            Clear Filters
+          </button>
+        )}
       </div>
 
       {/* KPI Section */}

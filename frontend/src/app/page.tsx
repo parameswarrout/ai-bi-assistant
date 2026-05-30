@@ -4,8 +4,8 @@ import React, { useState, useEffect } from "react";
 import Sidebar from "@/components/Sidebar";
 import Dashboard from "@/components/Dashboard";
 import Explorer from "@/components/Explorer";
-import ChatPanel from "@/components/ChatPanel";
 import { MessageSquareCode, Sparkles, Database, BarChart3, AlertCircle } from "lucide-react";
+import ChatPanel from "@/components/ChatPanel";
 
 interface Message {
   id: string;
@@ -21,8 +21,14 @@ interface Message {
 export default function Home() {
   const [activeTab, setActiveTab] = useState("dashboard");
   const [isChatOpen, setIsChatOpen] = useState(true);
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+
+  // Dashboard filter states
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const [region, setRegion] = useState("");
   
-  // Dashboard states
+  // Dashboard data states
   const [dashboardData, setDashboardData] = useState<any | null>(null);
   const [dashboardLoading, setDashboardLoading] = useState(true);
   const [dashboardError, setDashboardError] = useState<string | null>(null);
@@ -32,12 +38,17 @@ export default function Home() {
 
   const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
-  // Fetch Dashboard Data
+  // Fetch Dashboard Data with active filters
   const fetchDashboardData = async () => {
     setDashboardLoading(true);
     setDashboardError(null);
     try {
-      const response = await fetch(`${API_BASE_URL}/api/dashboard`);
+      const params = new URLSearchParams();
+      if (startDate) params.append("start_date", startDate);
+      if (endDate) params.append("end_date", endDate);
+      if (region && region !== "All") params.append("region", region);
+
+      const response = await fetch(`${API_BASE_URL}/api/dashboard?${params.toString()}`);
       if (!response.ok) {
         throw new Error(`Server returned code ${response.status}: ${response.statusText}`);
       }
@@ -53,9 +64,39 @@ export default function Home() {
     }
   };
 
+  // Fetch Dashboard data on filter updates
   useEffect(() => {
     fetchDashboardData();
-  }, []);
+  }, [startDate, endDate, region]);
+
+  // Load chat session history when activeSessionId changes
+  useEffect(() => {
+    const fetchSessionHistory = async () => {
+      if (!activeSessionId) {
+        setMessages([]);
+        return;
+      }
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/chat/sessions/${activeSessionId}`);
+        if (response.ok) {
+          const data = await response.json();
+          const formatted = data.map((msg: any) => ({
+            id: `msg-${msg.message_id}`,
+            sender: msg.sender,
+            text: msg.text,
+            sql: msg.sql || undefined,
+            data: msg.data || [],
+            model_used: msg.model_used || undefined,
+            loading: false
+          }));
+          setMessages(formatted);
+        }
+      } catch (err) {
+        console.error("Error fetching session messages:", err);
+      }
+    };
+    fetchSessionHistory();
+  }, [activeSessionId]);
 
   // Keyboard shortcut Ctrl+K to toggle chat panel
   useEffect(() => {
@@ -71,10 +112,16 @@ export default function Home() {
 
   // Submit question to chat panel
   const handleSendMessage = async (text: string) => {
+    let currentSessionId = activeSessionId;
+    if (!currentSessionId) {
+      currentSessionId = `session-${Date.now()}`;
+      setActiveSessionId(currentSessionId);
+    }
+
     const userMessageId = `user-${Date.now()}`;
     const assistantMessageId = `assistant-${Date.now()}`;
 
-    // Add user message
+    // Add user message to UI
     const newUserMsg: Message = {
       id: userMessageId,
       sender: "user",
@@ -98,7 +145,13 @@ export default function Home() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ message: text }),
+        body: JSON.stringify({ 
+          message: text, 
+          session_id: currentSessionId,
+          start_date: startDate || null,
+          end_date: endDate || null,
+          region: (region && region !== "All") ? region : null
+        }),
       });
 
       if (!response.ok) {
@@ -125,7 +178,7 @@ export default function Home() {
         })
       );
 
-      // If query succeeded, refresh dashboard statistics in background to reflect dynamic updates
+      // If query succeeded, refresh dashboard statistics in background
       if (!responseData.error) {
         fetchDashboardData();
       }
@@ -160,7 +213,9 @@ export default function Home() {
         activeTab={activeTab} 
         setActiveTab={setActiveTab} 
         isChatOpen={isChatOpen} 
-        setIsChatOpen={setIsChatOpen} 
+        setIsChatOpen={setIsChatOpen}
+        activeSessionId={activeSessionId}
+        setActiveSessionId={setActiveSessionId}
       />
 
       {/* Main Container */}
@@ -200,6 +255,12 @@ export default function Home() {
               loading={dashboardLoading} 
               error={dashboardError} 
               onAskQuestion={handleAskQuestionFromDashboard}
+              startDate={startDate}
+              setStartDate={setStartDate}
+              endDate={endDate}
+              setEndDate={setEndDate}
+              region={region}
+              setRegion={setRegion}
             />
           ) : (
             <Explorer apiBaseUrl={API_BASE_URL} />
@@ -213,6 +274,8 @@ export default function Home() {
         onSendMessage={handleSendMessage} 
         isOpen={isChatOpen} 
         setIsOpen={setIsChatOpen} 
+        activeSessionId={activeSessionId}
+        setMessages={setMessages}
       />
     </div>
   );
