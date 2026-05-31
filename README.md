@@ -8,12 +8,18 @@ A modern, full-stack enterprise analytics platform that allows users to ask busi
 * **Frontend**: Next.js 15, React 19, TypeScript, TailwindCSS, Recharts (Modern Dark Theme with glassmorphism)
 * **Backend**: FastAPI, SQLAlchemy (ORM)
 * **Database**: SQLite (10,000 orders, 1,000 customers, 100 products, payments, and employees)
-* **AI Engine**: Amazon Bedrock Claude 3 Sonnet & Local Ollama (e.g. `qwen2.5:3b`) with zero-config local rules fallback engine.
+* **AI Engine**: Abstracted multi-provider layer supporting Amazon Bedrock Claude 3 Sonnet & Local Ollama (e.g. `qwen2.5:3b`) with zero-config local rules fallback engine.
 
 ---
 
-## ✨ New Features
-* **Local LLM Sidebar Toggle**: Control the Local Model (Ollama) directly from the sidebar. Features a live status indicator showing:
+## ✨ Advanced Features
+* **📅 Dynamic Dashboard Filters**: Curved liquid glassmorphic date pickers (`DatePicker.tsx`) and region selectors (`RegionSelect.tsx`) situated at the top of the Executive Summary Dashboard.
+  - Clicking on the date fields programmatically triggers the native browser calendar popup.
+  - All dashboard filter constraints are automatically forwarded to subsequent AI Chat queries to limit the generated SQL scope.
+* **💾 Chat History Persistence (SQLite)**: Saves users' conversation history in the SQLite database automatically. Conversations are persistent across page reloads. Includes sidebar options to delete sessions or start new chats.
+* **📝 Edit & Re-run SQL Console**: Expandable SQL panels feature a "pencil" edit button that transforms the codeblock into a custom textarea SQL editor, allowing business developers to tweak queries and execute them against the database.
+* **📥 CSV Dataset Exporter**: Buttons next to generated chat result tables and direct inspector grids let users instantly download analytical outputs in a standard CSV format.
+* **🎛️ Local LLM Sidebar Toggle**: Control the Local Model (Ollama) directly from the sidebar. Features a live status indicator showing:
   - 🟢 **Ollama Active**: Server is up and queries are routed locally.
   - ⚪ **Ollama Offline**: Local server is stopped.
   - 🟣 **Starting...**: Spinner showing the background server booting.
@@ -33,23 +39,41 @@ ai_bi_assistant/
 ├── backend/
 │   ├── Dockerfile
 │   ├── requirements.txt
-│   ├── main.py
-│   ├── database.py
-│   ├── models.py
-│   ├── schemas.py
-│   ├── seed.py
-│   └── bedrock_service.py
+│   ├── main.py (FastAPI App Entry Point)
+│   ├── database.py (SQLAlchemy Session Factory)
+│   ├── seed.py (DB Data Generator)
+│   ├── models/ (Database Models Package)
+│   │   ├── __init__.py
+│   │   ├── business.py
+│   │   └── chat.py
+│   ├── schemas/ (Pydantic Validation Models Package)
+│   │   ├── __init__.py
+│   │   ├── chat.py
+│   │   ├── dashboard.py
+│   │   └── ollama.py
+│   ├── llm/ (Modular LLM Service Package)
+│   │   ├── __init__.py
+│   │   ├── base.py
+│   │   ├── service.py
+│   │   └── providers/
+│   │       ├── bedrock.py
+│   │       ├── ollama.py
+│   │       └── fallback.py
+│   ├── routers/ (APIRouters Package)
+│   │   ├── chat.py
+│   │   ├── dashboard.py
+│   │   ├── explorer.py
+│   │   └── ollama.py
+│   └── utils/ (Utility Modules Package)
+│       └── security.py
 ├── frontend/
 │   ├── Dockerfile
 │   ├── package.json
 │   ├── tsconfig.json
-│   ├── tailwind.config.ts
-│   ├── next.config.ts
-│   ├── postcss.config.mjs
-│   └── src/
-│       ├── app/ (layout, page, styles)
-│       ├── components/ (Dashboard, ChatPanel, Sidebar, Explorer)
-│       └── lib/ (utils)
+│   ├── src/
+│   │   ├── app/ (layout, page, globals.css)
+│   │   ├── components/ (Dashboard, ChatPanel, Sidebar, Explorer, DatePicker, RegionSelect)
+│   │   └── lib/ (utils)
 └── scripts/
     └── test_bedrock.py
 ```
@@ -113,9 +137,6 @@ Activate the virtual environment inside the `backend` folder (or root) and insta
 
 # Install requirements
 pip install -r backend/requirements.txt
-
-# Run database creation & seeding (runs automatically on startup, but you can run manually too)
-python backend/seed.py
 
 # Launch FastAPI server
 python backend/main.py

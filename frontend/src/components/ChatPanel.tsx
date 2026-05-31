@@ -13,7 +13,12 @@ import {
   ChevronDown, 
   ChevronUp, 
   AlertCircle,
-  HelpCircle
+  HelpCircle,
+  Edit2,
+  Play,
+  Download,
+  Loader2,
+  Mic
 } from "lucide-react";
 
 interface Message {
@@ -32,6 +37,8 @@ interface ChatPanelProps {
   onSendMessage: (text: string) => void;
   isOpen: boolean;
   setIsOpen: (open: boolean) => void;
+  activeSessionId: string | null;
+  setMessages: React.Dispatch<React.SetStateAction<Message[]>>;
 }
 
 const SUGGESTED_PROMPTS = [
@@ -43,16 +50,72 @@ const SUGGESTED_PROMPTS = [
   "Which region generated the highest revenue last quarter?"
 ];
 
-export default function ChatPanel({ messages, onSendMessage, isOpen, setIsOpen }: ChatPanelProps) {
+export default function ChatPanel({ 
+  messages, 
+  onSendMessage, 
+  isOpen, 
+  setIsOpen,
+  activeSessionId,
+  setMessages
+}: ChatPanelProps) {
   const [inputText, setInputText] = useState("");
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [expandedSqlIds, setExpandedSqlIds] = useState<Record<string, boolean>>({});
   const [expandedTableIds, setExpandedTableIds] = useState<Record<string, boolean>>({});
   
+  // Voice recording states
+  const [isRecording, setIsRecording] = useState(false);
+  const recognitionRef = useRef<any>(null);
+
+  // Custom SQL Console states
+  const [editingSqlId, setEditingSqlId] = useState<string | null>(null);
+  const [editedSqlText, setEditedSqlText] = useState("");
+  const [isRerunning, setIsRerunning] = useState<string | null>(null);
+
   const chatEndRef = useRef<HTMLDivElement>(null);
+
+  // Resizing logic for Chat Panel
+  const [width, setWidth] = useState(480); // Default to larger 480px
+  const isResizing = useRef(false);
+  const startWidthRef = useRef<number>(480);
+  const startXRef = useRef<number>(0);
+
+  const startResizing = (mouseDownEvent: React.MouseEvent) => {
+    mouseDownEvent.preventDefault();
+    isResizing.current = true;
+    startWidthRef.current = width;
+    startXRef.current = mouseDownEvent.clientX;
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
+  };
+
+  const handleMouseMove = (mouseMoveEvent: MouseEvent) => {
+    if (!isResizing.current) return;
+    const deltaX = mouseMoveEvent.clientX - startXRef.current;
+    const newWidth = startWidthRef.current - deltaX;
+    if (newWidth >= 320 && newWidth <= 850) {
+      setWidth(newWidth);
+    }
+  };
+
+  const handleMouseUp = () => {
+    isResizing.current = false;
+    document.removeEventListener("mousemove", handleMouseMove);
+    document.removeEventListener("mouseup", handleMouseUp);
+  };
+
+  // Clean up listeners on unmount
+  useEffect(() => {
+    return () => {
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, [width]);
 
   const lastAiMsg = [...messages].reverse().find(m => m.sender === "assistant" && m.model_used);
   const activeEngineLabel = lastAiMsg?.model_used || "Bedrock Claude Sonnet / Ollama";
+
+  const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
   // Auto-scroll to bottom of chat
   useEffect(() => {
@@ -64,6 +127,48 @@ export default function ChatPanel({ messages, onSendMessage, isOpen, setIsOpen }
     if (!inputText.trim()) return;
     onSendMessage(inputText);
     setInputText("");
+  };
+
+  const toggleSpeechRecognition = () => {
+    if (isRecording) {
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+      }
+      setIsRecording(false);
+    } else {
+      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      if (!SpeechRecognition) {
+        alert("Speech recognition is not supported in this browser.");
+        return;
+      }
+      const recognition = new SpeechRecognition();
+      recognition.continuous = false;
+      recognition.interimResults = false;
+      recognition.lang = "en-US";
+
+      recognition.onstart = () => {
+        setIsRecording(true);
+      };
+
+      recognition.onresult = (event: any) => {
+        const transcript = event.results[0][0].transcript;
+        setInputText(prev => prev ? `${prev} ${transcript}` : transcript);
+      };
+
+      recognition.onerror = (event: any) => {
+        if (event.error !== "no-speech" && event.error !== "aborted") {
+          console.error("Speech recognition error:", event.error);
+        }
+        setIsRecording(false);
+      };
+
+      recognition.onend = () => {
+        setIsRecording(false);
+      };
+
+      recognitionRef.current = recognition;
+      recognition.start();
+    }
   };
 
   const copyToClipboard = (text: string, id: string) => {
@@ -80,10 +185,90 @@ export default function ChatPanel({ messages, onSendMessage, isOpen, setIsOpen }
     setExpandedTableIds(prev => ({ ...prev, [id]: !prev[id] }));
   };
 
+  const handleRerunSql = async (messageId: string, originalQuestion: string) => {
+    setIsRerunning(messageId);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/chat/run_sql`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          session_id: activeSessionId || "",
+          sql: editedSqlText,
+          question: originalQuestion
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || "Database query failed");
+      }
+
+      const responseData = await response.json();
+
+      setMessages((prev: Message[]) =>
+        prev.map((m) => {
+          if (m.id === messageId) {
+            return {
+              ...m,
+              text: responseData.answer,
+              sql: responseData.sql,
+              data: responseData.data || [],
+              error: undefined,
+              model_used: responseData.model_used
+            };
+          }
+          return m;
+        })
+      );
+      setEditingSqlId(null);
+    } catch (err: any) {
+      console.error(err);
+      alert(`SQL Execution Error: ${err.message}`);
+    } finally {
+      setIsRerunning(null);
+    }
+  };
+
+  const handleExportCsv = (tableName: string, data: any[]) => {
+    if (!data || data.length === 0) return;
+    const headers = Object.keys(data[0]);
+    const csvRows = [];
+    
+    // Header row
+    csvRows.push(headers.join(","));
+    
+    // Data rows
+    for (const row of data) {
+      const values = headers.map(header => {
+        const val = row[header];
+        const escaped = ("" + (val === null || val === undefined ? "" : val)).replace(/"/g, '\\"');
+        return `"${escaped}"`;
+      });
+      csvRows.push(values.join(","));
+    }
+    
+    const csvContent = "data:text/csv;charset=utf-8," + csvRows.join("\n");
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `${tableName}_export_${Date.now()}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   if (!isOpen) return null;
 
   return (
-    <div className="w-[450px] bg-zinc-900 border-l border-zinc-800 flex flex-col shrink-0 h-full shadow-2xl relative z-10 glass-panel">
+    <div style={{ width: `${width}px` }} className="bg-zinc-900 border-l border-zinc-800 flex flex-col shrink-0 h-full shadow-2xl relative z-10 glass-panel">
+      {/* Draggable Resizer Handle on Left Border */}
+      <div 
+        onMouseDown={startResizing}
+        className="absolute left-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-violet-500/20 active:bg-violet-500/50 flex items-center justify-center shrink-0 h-full z-25 group transition-all duration-150"
+        title="Drag to resize Chat Panel"
+      >
+        <div className="w-[1px] h-full bg-zinc-850/80 group-hover:bg-violet-500" />
+      </div>
       {/* Header */}
       <div className="h-16 border-b border-zinc-800 px-4 flex items-center justify-between shrink-0 bg-zinc-950/40">
         <div className="flex items-center gap-2">
@@ -209,16 +394,66 @@ export default function ChatPanel({ messages, onSendMessage, isOpen, setIsOpen }
                           
                           {sqlExpanded && (
                             <div className="relative group">
-                              <pre className="p-3 text-[11px] font-mono text-zinc-300 overflow-x-auto whitespace-pre-wrap leading-relaxed max-h-48 border-t border-zinc-900 bg-zinc-950/80">
-                                {msg.sql}
-                              </pre>
-                              <button
-                                onClick={() => copyToClipboard(msg.sql || "", msg.id)}
-                                className="absolute right-2.5 top-2.5 p-1.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-zinc-200 opacity-0 group-hover:opacity-100 transition duration-150"
-                                title="Copy SQL"
-                              >
-                                {copiedId === msg.id ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-                              </button>
+                              {editingSqlId === msg.id ? (
+                                <div className="p-3 space-y-2 bg-zinc-950/80 border-t border-zinc-900">
+                                  <textarea
+                                    value={editedSqlText}
+                                    onChange={(e) => setEditedSqlText(e.target.value)}
+                                    rows={4}
+                                    className="w-full bg-zinc-900 border border-zinc-800 focus:border-violet-500 rounded p-2 text-[11px] font-mono text-zinc-200 outline-none resize-y"
+                                  />
+                                  <div className="flex gap-2 justify-end">
+                                    <button
+                                      onClick={() => setEditingSqlId(null)}
+                                      disabled={isRerunning === msg.id}
+                                      className="px-2.5 py-1 text-[10px] bg-zinc-850 hover:bg-zinc-800 text-zinc-300 rounded font-semibold transition"
+                                    >
+                                      Cancel
+                                    </button>
+                                    <button
+                                      onClick={() => {
+                                        const msgIndex = messages.findIndex(m => m.id === msg.id);
+                                        const userMsg = msgIndex > 0 ? messages[msgIndex - 1] : null;
+                                        handleRerunSql(msg.id, userMsg?.text || "custom query");
+                                      }}
+                                      disabled={isRerunning === msg.id}
+                                      className="flex items-center gap-1 px-2.5 py-1 text-[10px] bg-violet-600 hover:bg-violet-500 disabled:bg-zinc-850 text-white rounded font-semibold transition"
+                                    >
+                                      {isRerunning === msg.id ? (
+                                        <Loader2 className="w-3 h-3 animate-spin" />
+                                      ) : (
+                                        <Play className="w-3 h-3" />
+                                      )}
+                                      Run Query
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <>
+                                  <pre className="p-3 text-[11px] font-mono text-zinc-300 overflow-x-auto whitespace-pre-wrap leading-relaxed max-h-48 border-t border-zinc-900 bg-zinc-950/80">
+                                    {msg.sql}
+                                  </pre>
+                                  <div className="absolute right-2.5 top-2.5 flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition duration-155">
+                                    <button
+                                      onClick={() => {
+                                        setEditingSqlId(msg.id);
+                                        setEditedSqlText(msg.sql || "");
+                                      }}
+                                      className="p-1 rounded bg-zinc-900 border border-zinc-850 text-zinc-400 hover:text-zinc-200"
+                                      title="Edit SQL"
+                                    >
+                                      <Edit2 className="w-3 h-3" />
+                                    </button>
+                                    <button
+                                      onClick={() => copyToClipboard(msg.sql || "", msg.id)}
+                                      className="p-1 rounded bg-zinc-900 border border-zinc-850 text-zinc-400 hover:text-zinc-200"
+                                      title="Copy SQL"
+                                    >
+                                      {copiedId === msg.id ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                                    </button>
+                                  </div>
+                                </>
+                              )}
                             </div>
                           )}
                         </div>
@@ -227,15 +462,21 @@ export default function ChatPanel({ messages, onSendMessage, isOpen, setIsOpen }
                       {/* SQL Result Table Section */}
                       {msg.data && msg.data.length > 0 && (
                         <div className="border border-zinc-800 rounded-xl overflow-hidden bg-zinc-950/60">
-                          <button 
+                          <div 
                             onClick={() => toggleTable(msg.id)}
-                            className="w-full flex items-center justify-between px-3 py-2 bg-zinc-950/40 text-zinc-400 hover:text-zinc-200 text-xs font-semibold"
+                            className="w-full flex items-center justify-between px-3 py-2 bg-zinc-950/40 text-zinc-400 hover:text-zinc-200 text-xs font-semibold cursor-pointer"
                           >
                             <span className="flex items-center gap-1.5">
                               <Table className="w-3.5 h-3.5 text-blue-400" /> RESULTS TABLE ({msg.data.length} rows)
                             </span>
+                            <button 
+                              onClick={(e) => { e.stopPropagation(); handleExportCsv("chat_query", msg.data || []); }}
+                              className="ml-auto mr-3 flex items-center gap-1 text-[10px] text-zinc-400 hover:text-zinc-200 bg-zinc-900 border border-zinc-850 hover:border-zinc-800 px-2 py-0.5 rounded transition cursor-pointer"
+                            >
+                              <Download className="w-3 h-3 text-violet-400" /> Export CSV
+                            </button>
                             {tableExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-                          </button>
+                          </div>
 
                           {tableExpanded && (
                             <div className="overflow-x-auto border-t border-zinc-900 max-h-60 text-[10px] font-mono">
@@ -290,14 +531,26 @@ export default function ChatPanel({ messages, onSendMessage, isOpen, setIsOpen }
 
       {/* Input Bar */}
       <form onSubmit={handleSubmit} className="p-3 border-t border-zinc-800 shrink-0 bg-zinc-950/20">
-        <div className="flex gap-2">
-          <input
-            type="text"
-            value={inputText}
-            onChange={(e) => setInputText(e.target.value)}
-            placeholder="Ask a question about sales, regions, products..."
-            className="flex-1 bg-zinc-950 border border-zinc-800 focus:border-violet-500 rounded-xl px-3 py-2.5 text-xs text-zinc-100 placeholder-zinc-500 outline-none transition"
-          />
+        <div className="flex gap-2 items-center">
+          <div className="relative flex-1 flex items-center">
+            <input
+              type="text"
+              value={inputText}
+              onChange={(e) => setInputText(e.target.value)}
+              placeholder="Ask a question about sales, regions, products..."
+              className="w-full bg-zinc-950 border border-zinc-800 focus:border-violet-500 rounded-xl pl-3 pr-10 py-2.5 text-xs text-zinc-100 placeholder-zinc-500 outline-none transition"
+            />
+            <button
+              type="button"
+              onClick={toggleSpeechRecognition}
+              className={`absolute right-3 p-1 rounded-lg transition duration-150 hover:bg-zinc-850 ${
+                isRecording ? "text-red-500 animate-pulse" : "text-zinc-400 hover:text-zinc-200"
+              }`}
+              title={isRecording ? "Stop voice input" : "Start voice input (microphone)"}
+            >
+              <Mic className="w-3.5 h-3.5" />
+            </button>
+          </div>
           <button
             type="submit"
             disabled={!inputText.trim()}

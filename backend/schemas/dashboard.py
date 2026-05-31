@@ -1,18 +1,5 @@
 from pydantic import BaseModel
-from typing import List, Dict, Any, Optional
-
-class ChatRequest(BaseModel):
-    message: str
-
-class OllamaToggleRequest(BaseModel):
-    prefer_ollama: bool
-
-class ChatResponse(BaseModel):
-    answer: str
-    sql: str
-    data: List[Dict[str, Any]]
-    error: Optional[str] = None
-    model_used: Optional[str] = None
+from typing import List
 
 class KPICards(BaseModel):
     total_customers: int
