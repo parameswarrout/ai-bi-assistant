@@ -151,5 +151,45 @@ class LLMService:
                 return self.fallback_provider.generate_explanation(question, sql, data)
             raise e
 
+    def generate_dba_plan(self, sql: str, plan_text: str) -> str:
+        provider = self.get_active_provider()
+        try:
+            return provider.generate_dba_plan(sql, plan_text)
+        except Exception as e:
+            print(f"Active provider '{provider.get_model_name()}' failed to generate DBA plan. Trying fallback...")
+            if provider != self.fallback_provider:
+                return self.fallback_provider.generate_dba_plan(sql, plan_text)
+            raise e
+
+    def generate_qc_report(self, question: str, data: list) -> str:
+        provider = self.get_active_provider()
+        try:
+            return provider.generate_qc_report(question, data)
+        except Exception as e:
+            print(f"Active provider '{provider.get_model_name()}' failed to generate QC report. Trying fallback...")
+            if provider != self.fallback_provider:
+                return self.fallback_provider.generate_qc_report(question, data)
+            raise e
+
+    def generate_forecast(self, question: str, data: list) -> str:
+        provider = self.get_active_provider()
+        try:
+            return provider.generate_forecast(question, data)
+        except Exception as e:
+            print(f"Active provider '{provider.get_model_name()}' failed to generate forecast. Trying fallback...")
+            if provider != self.fallback_provider:
+                return self.fallback_provider.generate_forecast(question, data)
+            raise e
+
+    def generate_action_plan(self, question: str, explanation: str, data: list) -> str:
+        provider = self.get_active_provider()
+        try:
+            return provider.generate_action_plan(question, explanation, data)
+        except Exception as e:
+            print(f"Active provider '{provider.get_model_name()}' failed to generate action plan. Trying fallback...")
+            if provider != self.fallback_provider:
+                return self.fallback_provider.generate_action_plan(question, explanation, data)
+            raise e
+
 # Shared Singleton Instance
 llm_service = LLMService()

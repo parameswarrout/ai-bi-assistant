@@ -24,7 +24,8 @@ def post_chat(req: ChatRequest, db: Session = Depends(get_db)):
             detail="Message cannot be empty."
         )
 
-    # Automatically create session if it doesn't exist
+    # Load previous history context from db and automatically create session if it doesn't exist
+    history_context = ""
     if req.session_id:
         session = db.query(ChatSession).filter(ChatSession.session_id == req.session_id).first()
         if not session:
@@ -34,6 +35,14 @@ def post_chat(req: ChatRequest, db: Session = Depends(get_db)):
             )
             db.add(session)
             db.commit()
+        else:
+            # Load the last 4 messages of this session
+            past_messages = db.query(ChatMessage).filter(
+                ChatMessage.session_id == req.session_id
+            ).order_by(ChatMessage.created_at.desc()).limit(4).all()
+            past_messages = past_messages[::-1]
+            if past_messages:
+                history_context = "\n".join([f"{m.sender}: {m.text}" for m in past_messages])
         
         # Save user message
         user_msg = ChatMessage(
@@ -59,6 +68,14 @@ def post_chat(req: ChatRequest, db: Session = Depends(get_db)):
         
         if req.region and req.region.strip():
             llm_question += f" (Strictly filter the SQL query to only include data for the region '{req.region.strip()}')"
+
+        # Prepend history context if available
+        if history_context:
+            llm_question = (
+                f"Previous Conversation History:\n{history_context}\n\n"
+                f"User Follow-up Question: {llm_question}\n\n"
+                f"Generate a valid SQLite query for the follow-up question. Return ONLY the valid SQL query."
+            )
 
         # Step 1: Generate SQL query from question (using Bedrock/Ollama/fallback)
         sql_query = llm_service.generate_sql(llm_question)
@@ -132,7 +149,10 @@ def post_chat(req: ChatRequest, db: Session = Depends(get_db)):
             data.append(row_dict)
 
         # Step 4: Generate a natural business explanation of the query results
-        explanation = llm_service.generate_explanation(question, sql_query, data)
+        exp_question = question
+        if history_context:
+            exp_question = f"Previous Conversation History:\n{history_context}\n\nFollow-up Question: {question}"
+        explanation = llm_service.generate_explanation(exp_question, sql_query, data)
 
         if req.session_id:
             assistant_msg = ChatMessage(
@@ -282,3 +302,17 @@ def delete_chat_session(session_id: str, db: Session = Depends(get_db)):
     db.delete(session)
     db.commit()
     return {"status": "success", "message": "Session deleted"}
+
+# --- NEW MULTI-AGENT COLLABORATION ADD-ON ---
+from schemas.agents import AgentWorkspaceResponse
+from agent_team import agent_team
+
+@router.post("/collaborative", response_model=AgentWorkspaceResponse)
+def post_collaborative_chat(req: ChatRequest, db: Session = Depends(get_db)):
+    question = req.message.strip()
+    if not question:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Message cannot be empty."
+        )
+    return agent_team.run_collaborative_analysis(question, db, req.history)

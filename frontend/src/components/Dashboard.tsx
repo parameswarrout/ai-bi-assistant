@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useState, useEffect } from "react";
 import DatePicker from "./DatePicker";
 import RegionSelect from "./RegionSelect";
 import { 
@@ -103,7 +103,12 @@ export default function Dashboard({
   region,
   setRegion
 }: DashboardProps) {
-  if (loading) {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted || loading) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center min-h-[500px]">
         <Loader2 className="w-10 h-10 text-violet-500 animate-spin mb-4" />

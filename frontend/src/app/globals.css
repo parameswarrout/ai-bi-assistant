@@ -3,7 +3,7 @@
 @tailwind utilities;
 
 :root {
-  --background: 240 10% 4%;
+  --background: 240 10% 3.9%;
   --foreground: 240 5% 96%;
   --card: 240 10% 6%;
   --card-foreground: 240 5% 96%;
@@ -23,10 +23,49 @@
   --radius: 0.75rem;
 }
 
+/* 4 Custom HSL Themes */
+.theme-midnight {
+  --background: 240 10% 3.9%;
+  --foreground: 240 5% 96%;
+  --card: 240 10% 6%;
+  --primary: 263.4 70% 50.4%;
+  --ring: 263.4 70% 50.4%;
+  --border: 240 5% 15%;
+}
+
+.theme-emerald {
+  --background: 140 15% 4%;
+  --foreground: 140 5% 96%;
+  --card: 140 12% 6%;
+  --primary: 142.1 76.2% 36.3%; /* Emerald */
+  --accent: 47.9 95.8% 51.2%; /* Gold */
+  --ring: 142.1 76.2% 36.3%;
+  --border: 140 10% 12%;
+}
+
+.theme-cyberpunk {
+  --background: 320 25% 2%;
+  --foreground: 300 100% 97%;
+  --card: 320 20% 4%;
+  --primary: 326.6 100% 50%; /* Pink */
+  --accent: 180 100% 50%; /* Cyan */
+  --ring: 326.6 100% 50%;
+  --border: 320 20% 15%;
+}
+
+.theme-glassmorphism {
+  --background: 240 10% 3%;
+  --foreground: 240 5% 96%;
+  --card: 240 10% 4% / 0.4;
+  --primary: 263.4 70% 50.4%;
+  --ring: 263.4 70% 50.4%;
+  --border: 240 5% 15% / 0.15;
+}
+
 body {
   color-scheme: dark;
-  background-color: rgb(9, 9, 11);
-  color: rgb(244, 244, 245);
+  background-color: hsl(var(--background));
+  color: hsl(var(--foreground));
   font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   overflow-x: hidden;
 }
@@ -109,4 +148,58 @@ input[type="date"]::-webkit-calendar-picker-indicator:hover {
 
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(82, 82, 91, 0.8);
+}
+
+/* Print optimization for PDF report export */
+@media print {
+  body {
+    background: white !important;
+    color: black !important;
+  }
+  
+  /* Hide unnecessary elements */
+  .no-print,
+  nav,
+  aside,
+  header,
+  form,
+  button,
+  .draggable-resizer,
+  .timeline-col,
+  .suggestions-row,
+  .theme-selector-panel {
+    display: none !important;
+  }
+
+  /* Stretch deliverables report block to full printable width */
+  .print-report-container {
+    width: 100% !important;
+    max-width: 100% !important;
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    background: white !important;
+    color: black !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
+
+  .print-report-container h2, 
+  .print-report-container h3, 
+  .print-report-container h4,
+  .print-report-container span,
+  .print-report-container p,
+  .print-report-container table,
+  .print-report-container td,
+  .print-report-container th {
+    color: black !important;
+  }
+
+  .print-report-container .glass-card {
+    background: transparent !important;
+    border: 1px solid #e4e4e7 !important;
+    box-shadow: none !important;
+    page-break-inside: avoid;
+  }
 }

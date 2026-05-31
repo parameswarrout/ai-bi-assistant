@@ -8,6 +8,7 @@ class ChatRequest(BaseModel):
     start_date: Optional[str] = None
     end_date: Optional[str] = None
     region: Optional[str] = None
+    history: Optional[List[Dict[str, str]]] = None
 
 class RunSQLRequest(BaseModel):
     session_id: str

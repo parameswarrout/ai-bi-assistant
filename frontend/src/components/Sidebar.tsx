@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { BarChart3, Database, MessageSquareCode, Settings, ShieldCheck, Terminal, User, Cpu, Plus, Trash2, MessageSquare } from "lucide-react";
+import { BarChart3, Database, MessageSquareCode, Settings, ShieldCheck, Terminal, User, Cpu, Plus, Trash2, MessageSquare, Pin } from "lucide-react";
 
 interface SidebarProps {
   activeTab: string;
@@ -156,6 +156,8 @@ export default function Sidebar({
   const navItems = [
     { id: "dashboard", label: "Dashboard", icon: BarChart3 },
     { id: "reports", label: "Database Explorer", icon: Database },
+    { id: "agents", label: "Agent Workspace", icon: MessageSquareCode },
+    { id: "pins", label: "Saved Insights", icon: Pin },
   ];
 
   return (

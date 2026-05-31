@@ -17,7 +17,8 @@ import {
   Edit2,
   Play,
   Download,
-  Loader2
+  Loader2,
+  Mic
 } from "lucide-react";
 
 interface Message {
@@ -62,12 +63,54 @@ export default function ChatPanel({
   const [expandedSqlIds, setExpandedSqlIds] = useState<Record<string, boolean>>({});
   const [expandedTableIds, setExpandedTableIds] = useState<Record<string, boolean>>({});
   
+  // Voice recording states
+  const [isRecording, setIsRecording] = useState(false);
+  const recognitionRef = useRef<any>(null);
+
   // Custom SQL Console states
   const [editingSqlId, setEditingSqlId] = useState<string | null>(null);
   const [editedSqlText, setEditedSqlText] = useState("");
   const [isRerunning, setIsRerunning] = useState<string | null>(null);
 
   const chatEndRef = useRef<HTMLDivElement>(null);
+
+  // Resizing logic for Chat Panel
+  const [width, setWidth] = useState(480); // Default to larger 480px
+  const isResizing = useRef(false);
+  const startWidthRef = useRef<number>(480);
+  const startXRef = useRef<number>(0);
+
+  const startResizing = (mouseDownEvent: React.MouseEvent) => {
+    mouseDownEvent.preventDefault();
+    isResizing.current = true;
+    startWidthRef.current = width;
+    startXRef.current = mouseDownEvent.clientX;
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
+  };
+
+  const handleMouseMove = (mouseMoveEvent: MouseEvent) => {
+    if (!isResizing.current) return;
+    const deltaX = mouseMoveEvent.clientX - startXRef.current;
+    const newWidth = startWidthRef.current - deltaX;
+    if (newWidth >= 320 && newWidth <= 850) {
+      setWidth(newWidth);
+    }
+  };
+
+  const handleMouseUp = () => {
+    isResizing.current = false;
+    document.removeEventListener("mousemove", handleMouseMove);
+    document.removeEventListener("mouseup", handleMouseUp);
+  };
+
+  // Clean up listeners on unmount
+  useEffect(() => {
+    return () => {
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, [width]);
 
   const lastAiMsg = [...messages].reverse().find(m => m.sender === "assistant" && m.model_used);
   const activeEngineLabel = lastAiMsg?.model_used || "Bedrock Claude Sonnet / Ollama";
@@ -84,6 +127,48 @@ export default function ChatPanel({
     if (!inputText.trim()) return;
     onSendMessage(inputText);
     setInputText("");
+  };
+
+  const toggleSpeechRecognition = () => {
+    if (isRecording) {
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+      }
+      setIsRecording(false);
+    } else {
+      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      if (!SpeechRecognition) {
+        alert("Speech recognition is not supported in this browser.");
+        return;
+      }
+      const recognition = new SpeechRecognition();
+      recognition.continuous = false;
+      recognition.interimResults = false;
+      recognition.lang = "en-US";
+
+      recognition.onstart = () => {
+        setIsRecording(true);
+      };
+
+      recognition.onresult = (event: any) => {
+        const transcript = event.results[0][0].transcript;
+        setInputText(prev => prev ? `${prev} ${transcript}` : transcript);
+      };
+
+      recognition.onerror = (event: any) => {
+        if (event.error !== "no-speech" && event.error !== "aborted") {
+          console.error("Speech recognition error:", event.error);
+        }
+        setIsRecording(false);
+      };
+
+      recognition.onend = () => {
+        setIsRecording(false);
+      };
+
+      recognitionRef.current = recognition;
+      recognition.start();
+    }
   };
 
   const copyToClipboard = (text: string, id: string) => {
@@ -175,7 +260,15 @@ export default function ChatPanel({
   if (!isOpen) return null;
 
   return (
-    <div className="w-[450px] bg-zinc-900 border-l border-zinc-800 flex flex-col shrink-0 h-full shadow-2xl relative z-10 glass-panel">
+    <div style={{ width: `${width}px` }} className="bg-zinc-900 border-l border-zinc-800 flex flex-col shrink-0 h-full shadow-2xl relative z-10 glass-panel">
+      {/* Draggable Resizer Handle on Left Border */}
+      <div 
+        onMouseDown={startResizing}
+        className="absolute left-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-violet-500/20 active:bg-violet-500/50 flex items-center justify-center shrink-0 h-full z-25 group transition-all duration-150"
+        title="Drag to resize Chat Panel"
+      >
+        <div className="w-[1px] h-full bg-zinc-850/80 group-hover:bg-violet-500" />
+      </div>
       {/* Header */}
       <div className="h-16 border-b border-zinc-800 px-4 flex items-center justify-between shrink-0 bg-zinc-950/40">
         <div className="flex items-center gap-2">
@@ -438,14 +531,26 @@ export default function ChatPanel({
 
       {/* Input Bar */}
       <form onSubmit={handleSubmit} className="p-3 border-t border-zinc-800 shrink-0 bg-zinc-950/20">
-        <div className="flex gap-2">
-          <input
-            type="text"
-            value={inputText}
-            onChange={(e) => setInputText(e.target.value)}
-            placeholder="Ask a question about sales, regions, products..."
-            className="flex-1 bg-zinc-950 border border-zinc-800 focus:border-violet-500 rounded-xl px-3 py-2.5 text-xs text-zinc-100 placeholder-zinc-500 outline-none transition"
-          />
+        <div className="flex gap-2 items-center">
+          <div className="relative flex-1 flex items-center">
+            <input
+              type="text"
+              value={inputText}
+              onChange={(e) => setInputText(e.target.value)}
+              placeholder="Ask a question about sales, regions, products..."
+              className="w-full bg-zinc-950 border border-zinc-800 focus:border-violet-500 rounded-xl pl-3 pr-10 py-2.5 text-xs text-zinc-100 placeholder-zinc-500 outline-none transition"
+            />
+            <button
+              type="button"
+              onClick={toggleSpeechRecognition}
+              className={`absolute right-3 p-1 rounded-lg transition duration-150 hover:bg-zinc-850 ${
+                isRecording ? "text-red-500 animate-pulse" : "text-zinc-400 hover:text-zinc-200"
+              }`}
+              title={isRecording ? "Stop voice input" : "Start voice input (microphone)"}
+            >
+              <Mic className="w-3.5 h-3.5" />
+            </button>
+          </div>
           <button
             type="submit"
             disabled={!inputText.trim()}
