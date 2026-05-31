@@ -13,9 +13,20 @@ A modern, full-stack enterprise analytics platform that allows users to ask busi
 ---
 
 ## ✨ Advanced Features
+* **🤖 Multi-Agent Analyst Collaboration Workspace**: A dedicated advanced analytics panel powered by a team of 8 specialized agents working sequentially to resolve business questions:
+  - 🛠️ **SQL Engineer**: Translates natural language into SQLite syntax with a self-correction loop.
+  - 🛡️ **Risk Auditor**: Evaluates query safety, ensuring read-only execution.
+  - ⚡ **Performance DBA**: Pulls execution query plans (`EXPLAIN QUERY PLAN`) and lists query optimizer details.
+  - 🔍 **Quality Control**: Sanity-checks the output dataset row counts, value ranges, and variance.
+  - 🎨 **Design Agent**: Determines and maps the best visual representation (Area, Pie, Bar, or Grid Table).
+  - 📈 **Business Strategist**: Synthesizes high-level corporate insights and strategic takeaways.
+  - 🔮 **Trend Forecaster**: Projects future trends based on historical sequences.
+  - 🎯 **Action Planner**: Formulates three concrete operational next steps based on findings.
 * **📅 Dynamic Dashboard Filters**: Curved liquid glassmorphic date pickers (`DatePicker.tsx`) and region selectors (`RegionSelect.tsx`) situated at the top of the Executive Summary Dashboard.
   - Clicking on the date fields programmatically triggers the native browser calendar popup.
   - All dashboard filter constraints are automatically forwarded to subsequent AI Chat queries to limit the generated SQL scope.
+* **📌 Saved Insights Pin Gallery**: A dedicated screen and sidebar section where users can "pin" and save key charts, generated SQL queries, and strategic briefs. Pinned data is saved to browser `localStorage` and persists across page reloads.
+* **🎨 Custom App Themes**: Dynamic visual theme switcher in the navbar allowing users to change the aesthetic to **Midnight Velvet**, **Emerald Oasis**, **Cyberpunk Neon**, or **Glassmorphism Frost**.
 * **💾 Chat History Persistence (SQLite)**: Saves users' conversation history in the SQLite database automatically. Conversations are persistent across page reloads. Includes sidebar options to delete sessions or start new chats.
 * **📝 Edit & Re-run SQL Console**: Expandable SQL panels feature a "pencil" edit button that transforms the codeblock into a custom textarea SQL editor, allowing business developers to tweak queries and execute them against the database.
 * **📥 CSV Dataset Exporter**: Buttons next to generated chat result tables and direct inspector grids let users instantly download analytical outputs in a standard CSV format.
@@ -42,6 +53,7 @@ ai_bi_assistant/
 │   ├── main.py (FastAPI App Entry Point)
 │   ├── database.py (SQLAlchemy Session Factory)
 │   ├── seed.py (DB Data Generator)
+│   ├── agent_team.py (Multi-Agent Collaboration Engine)
 │   ├── models/ (Database Models Package)
 │   │   ├── __init__.py
 │   │   ├── business.py
@@ -50,7 +62,8 @@ ai_bi_assistant/
 │   │   ├── __init__.py
 │   │   ├── chat.py
 │   │   ├── dashboard.py
-│   │   └── ollama.py
+│   │   ├── ollama.py
+│   │   └── agents.py (Agent Collaboration Schemas)
 │   ├── llm/ (Modular LLM Service Package)
 │   │   ├── __init__.py
 │   │   ├── base.py
@@ -72,10 +85,11 @@ ai_bi_assistant/
 │   ├── tsconfig.json
 │   ├── src/
 │   │   ├── app/ (layout, page, globals.css)
-│   │   ├── components/ (Dashboard, ChatPanel, Sidebar, Explorer, DatePicker, RegionSelect)
+│   │   ├── components/ (Dashboard, ChatPanel, Sidebar, Explorer, DatePicker, RegionSelect, AgentWorkspace, PinsGallery)
 │   │   └── lib/ (utils)
 └── scripts/
-    └── test_bedrock.py
+    ├── test_bedrock.py
+    └── test_agents.py
 ```
 
 ---
