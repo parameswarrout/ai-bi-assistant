@@ -25,6 +25,9 @@ export default function Home() {
   const [isChatOpen, setIsChatOpen] = useState(true);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   
+  // Track if session was just created from chat submit to prevent fetch race condition
+  const isNewSessionRef = React.useRef(false);
+
   // Theme and Pinned Insights state hooks
   const [theme, setTheme] = useState("midnight");
   const [pinnedInsights, setPinnedInsights] = useState<any[]>([]);
@@ -120,6 +123,13 @@ export default function Home() {
         setMessages([]);
         return;
       }
+
+      // If session was just generated during query submit, skip history fetch to avoid clearing state
+      if (isNewSessionRef.current) {
+        isNewSessionRef.current = false;
+        return;
+      }
+
       try {
         const response = await fetch(`${API_BASE_URL}/api/chat/sessions/${activeSessionId}`);
         if (response.ok) {
@@ -159,6 +169,7 @@ export default function Home() {
     let currentSessionId = activeSessionId;
     if (!currentSessionId) {
       currentSessionId = `session-${Date.now()}`;
+      isNewSessionRef.current = true;
       setActiveSessionId(currentSessionId);
     }
 
